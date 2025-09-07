@@ -1,0 +1,64 @@
+services:
+  problem5-api:
+    image: problem5-api
+    container_name: problem5-api
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    env_file:
+      - .env.docker
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./src:/app/src
+      - /app/node_modules
+    command: npm run start:dev
+    environment:
+      CHOKIDAR_USEPOLLING: 'true'
+      WATCHPACK_POLLING: 'true'
+    depends_on:
+      - mongo
+    networks:
+      - problem5-network
+
+  # MongoDB Service
+  mongo:
+    image: mongo:7.0.23
+    container_name: problem5-mongo
+    restart: always
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_DATABASE: problem5_database
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpass
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - problem5-network
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: mongo-express
+    restart: always
+    depends_on:
+      - mongo
+    ports:
+      - '18081:8081'
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: rootpass
+      ME_CONFIG_MONGODB_URL: mongodb://root:rootpass@mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    networks:
+      - problem5-network
+
+volumes:
+  mongo_data:
+
+networks:
+  problem5-network:
+    driver: bridge
