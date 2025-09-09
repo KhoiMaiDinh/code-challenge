@@ -220,7 +220,7 @@ Response:
 }
 ```
 
-## **10. Sequence Diagram**
+## **11. Sequence Diagram**
 mermaid
 ```
     sequenceDiagram
@@ -245,9 +245,7 @@ mermaid
     BE->>WS: Broadcast leaderboard update
     BE-->>FE: Return success + new leaderboard
 ```
-
-
-## **10. Data Flow**
+## **12. Data Flow**
 User starts an action → Backend returns an anti-spam token.
 
 User completes the action → Frontend collects proof-of-work (PoW).
@@ -259,3 +257,65 @@ Backend validates → Updates score in Redis.
 Leaderboard recalculated automatically via Redis ZSET.
 
 WebSocket service pushes real-time updates if the top 10 leaderboard changes.
+
+## **13. Scaling Enhancements for Large User Volume**
+The initial design works well for **small-to-medium user bases**.  
+However, to handle **higher concurrent users** volumn efficiently, several optimizations are introduced:
+
+### **13.1. Asynchronous DB Writes**
+- Use a **write-ahead queue** (e.g., Kafka, BullMQ, or RabbitMQ) for persisting score updates.
+- **Redis becomes the source of truth** for real-time scores.
+- The database achieves **eventual consistency**, reducing write contention.
+
+---
+
+### **13.2. Redis Scaling**
+- **Redis Cluster**  
+  - Move from a single Redis node to a **Redis Cluster** with sharding to handle higher read/write throughput.
+- **Read replicas**  
+  - Use Redis replicas to offload leaderboard queries while keeping writes on the primary.
+
+---
+
+### **13.3. Application-Level Caching**
+- Cache the **top 10 leaderboard** in memory on the backend for **100–200ms**.
+- Reduces Redis hits under high concurrency.
+- **Cache invalidation** is triggered only when the top 10 set changes.
+
+---
+
+### **13.4. WebSocket Optimizations**
+- **Delta-based updates**  
+  - Instead of broadcasting the **entire top 10 leaderboard** every time, only send the **diff** when a user's rank or score changes.
+- **Batch notifications**  
+  - Group leaderboard changes within **100ms intervals** to reduce WebSocket traffic and prevent client overload.
+
+---
+### **13.5. Proof-of-Work Payload Optimization**
+- Store only **hashes** of PoW data in Redis and the DB.
+- Reduces payload size, CPU usage, and verification costs under heavy load.
+- Only apply in case PoW is not needed to be shown to users
+
+---
+
+### **Summary of Benefits**
+| Optimization                  | Problem Solved                                | Result                             |
+|-----------------------------|--------------------------------------------|----------------------------------|
+| Async DB writes            | Write bottleneck                            | High throughput, eventual consistency |
+| Redis Cluster + replicas    | Single-node bottleneck                     | Horizontal scaling               |
+| App-level caching           | Excessive Redis hits                       | Lower latency                    |
+| Delta WebSocket updates     | Heavy network traffic                      | Smaller payloads, faster updates |
+| PoW hashing                 | High CPU and storage usage                 | Faster verification              |
+
+### **Conclusion**
+
+You don’t need to apply all the optimization strategies up front. Techniques suggested are powerful — but each adds **complexity** and **operational overhead**.
+
+Before adopting any strategy:
+
+1. **Measure first** → Use metrics, logs, and profiling tools to identify **real bottlenecks**.  
+2. **Optimize where it matters** → If the current design works well under moderate load, **don’t over-engineer**.  
+3. **Start simple** → Begin with the basic implementation and monitor performance under realistic traffic.  
+4. **Scale gradually** → Introduce advanced strategies **only when performance or cost becomes an issue**.
+
+> **“Optimize only when you need to — solve real problems, not hypothetical ones.”**
